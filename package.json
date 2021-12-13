@@ -1,0 +1,32 @@
+{
+  "name": "collateral-risk",
+  "version": "1.0.0",
+  "description": "rari capital fuse collateral risk api",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hdewey/collateral-risk.git"
+  },
+  "devDependencies": {
+    "@vercel/node": "^1.8.3"
+  },
+  "dependencies": {
+    "@sushiswap/sdk": "^5.0.0-canary.108",
+    "@sushiswap/sushi-data": "^1.0.26",
+    "@uniswap/sdk": "^3.0.3",
+    "axios": "^0.24.0",
+    "bad-words": "^3.0.4",
+    "eth-checksum": "^1.0.1",
+    "lodash": "^4.17.21",
+    "mathjs": "^10.0.0",
+    "smart-request-balancer": "^2.1.1",
+    "typescript": "^4.0.3",
+    "uni-data": "git://github.com/hdewey/sushi-data",
+    "uuid": "^8.3.2",
+    "vercel": "^23.1.2",
+    "web3": "^1.2.11"
+  }
+}

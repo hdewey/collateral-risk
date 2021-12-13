@@ -1,0 +1,22 @@
+{
+	"overrides" : [
+		{
+			"address"    : "0x04F2694C8fcee23e8Fd0dfEA1d4f5Bb8c352111F",
+			"underlying" : "0x383518188c0c6d7730d91b2c03a03c837814a899"
+		}, 
+		{
+			"address"    : "0x26fa3fffb6efe8c1e69103acb4044c26b9a106a9",
+			"underlying" : "0x090185f2135308bad17527004364ebcc2d37e5f6"
+		},
+		{
+			"address"    : "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 
+			"tests" : [
+				{
+					"test" : "crash",
+					"section" : "twitter",
+					"value"  : false
+				}
+			]
+		}
+	]
+}

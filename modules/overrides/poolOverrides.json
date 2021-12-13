@@ -1,0 +1,8 @@
+{
+	"overrides" : [
+		{
+			"poolID"   : "0",
+			"multisig" : true
+		}
+	]
+}
