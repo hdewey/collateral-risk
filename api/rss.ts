@@ -78,10 +78,10 @@ const scorePool = async (poolID: string) => {
       }
 
       // check override file to replace asset address (or return asset address if no override)
-      const addressFromOverride = fetchAddressOverride(asset.underlyingToken);
+      const overrideAddress = fetchAddressOverride(asset.underlyingToken);
 
       // test address to see if token:WETH pool exists on sushi or uni
-      const poolProvider = await testSources(addressFromOverride);
+      const poolProvider = await testSources(overrideAddress);
       
       // if asset not listed on sushiswap or uniswap
       if (poolProvider === 'none') {
@@ -89,10 +89,10 @@ const scorePool = async (poolID: string) => {
       } else {
 
         // returns data for score calculations
-        const assetData: AssetData = await congregateAssetData(asset, addressFromOverride, comptrollerContract, poolProvider);
+        const assetData: AssetData = await congregateAssetData(asset, overrideAddress, comptrollerContract, poolProvider);
 
         // score the asset
-        const scoreBlock: ScoreBlock = await scoreAsset(addressFromOverride, assetData);
+        const scoreBlock: ScoreBlock = await scoreAsset(overrideAddress, assetData);
 
         return scoreBlock;
       }

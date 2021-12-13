@@ -17,6 +17,13 @@ export default async (request: VercelRequest, response: VercelResponse) => {
   )
 }
 
+const sources = [
+  {
+    name: "coingecko",
+    url : ""
+  }
+]
+
 // fetch data points from variety of sources for specific address
 const fetchAssetData = async (address):Promise<FetchedData> => {
   

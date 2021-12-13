@@ -376,7 +376,7 @@ const queue = new Queue({
     // uniswap (thegraph)
     uniswap: {
       rate    : 60,       
-      limit   : 10,      
+      limit   : 10,
       priority: 1
     },
     // sushiswap (thegraph)
