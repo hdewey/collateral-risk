@@ -30,7 +30,7 @@ const fuse = initFuseWithProviders(alchemyURL);
 const web3 = new Web3(alchemyURL);
 
 // url for making requests to the rss-module apis (requests are api's instead of modules so vercel can cache each asset for scoring subsequent pools)
-const url = "https://rari-rss.vercel.app/api";
+const url = "https://collateral-risk.vercel.app/api";
 // const url = "http://localhost:3000/api";
 
 // eslint-disable-next-line import/no-anonymous-default-export
