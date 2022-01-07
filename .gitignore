@@ -34,7 +34,4 @@ cypress.env.json
 .vercel
 .env
 
-/modules/fuse-sdk
-/modules/rari-sdk
-
 .eslintcache
