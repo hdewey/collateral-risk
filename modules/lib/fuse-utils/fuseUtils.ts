@@ -1,4 +1,4 @@
-import Fuse from "../fuse-sdk";
+import Fuse from "../fuse-sdk/src";
 import Rari from "../rari-sdk/index";
 
 

@@ -6,8 +6,8 @@ import fetch   from "node-fetch";
 import { max } from "mathjs";
 
 // fuse utils
-import { fetchFusePoolData, USDPricedFuseAsset } from "../modules/fuse-utils/fuseUtils";
-import { initFuseWithProviders, alchemyURL     } from "../modules/fuse-utils/web3Providers";
+import { fetchFusePoolData, USDPricedFuseAsset } from "../modules/lib/fuse-utils/fuseUtils";
+import { initFuseWithProviders, alchemyURL     } from "../modules/lib/fuse-utils/web3Providers";
 
 // functions (by category)
 import { 

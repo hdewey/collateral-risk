@@ -8,8 +8,8 @@ import { ChainId as sushi_ChainId, Token as sushi_Token, Pair as sushi_Pair } fr
 import { ChainId as uni_ChainId, Token as uni_Token, Pair as uni_Pair } from '@uniswap/sdk'
 
 // importing asset and pool overrides
-import { overrides as poolOverrides } from "./overrides/poolOverrides.json";
-import { overrides as assetOverrides } from "./overrides/assetOverrides.json"; 
+import { overrides as poolOverrides } from "../overrides/poolOverrides.json";
+import { overrides as assetOverrides } from "../overrides/assetOverrides.json"; 
 
 // for calculating overall score
 import { max } from 'mathjs';
