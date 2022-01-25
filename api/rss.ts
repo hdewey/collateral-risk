@@ -38,7 +38,9 @@ export default async (request: VercelRequest, response: VercelResponse) => {
   const { poolID } = request.query as { [key: string]: string };
 
   response.setHeader("Access-Control-Allow-Origin", "*");
-  response.setHeader("Cache-Control", "s-maxage=21600");
+
+  // half-day cache time
+  response.setHeader("Cache-Control", "s-maxage=43200");
 
   let lastUpdated = new Date().toLocaleString("en-US", {
     timeZone: "America/Los_Angeles",
@@ -305,6 +307,15 @@ const testSources = async (address: string): Promise<string> => {
   const coingecko = await checkCoingecko(address);
   const sushiswap = await checkSushiswap(address);
   const uniswap   = await checkUniswap(address);
+
+  if (address === "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0") {
+    console.log('-----')
+    console.log(' address:', address)
+    console.log( "coingecko:", coingecko)
+    console.log( "sushiswap:", sushiswap)
+    console.log( "uniswap:", uniswap)
+    console.log('-----')
+  }
 
   if (coingecko && (sushiswap || uniswap)) {
     return uniswap ? 'uniswap' : 'sushiswap';

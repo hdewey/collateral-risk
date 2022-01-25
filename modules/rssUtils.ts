@@ -26,7 +26,7 @@ import Queue from 'smart-request-balancer';
 import { v4 as uuidv4 } from 'uuid';
 
 // have to checksum addresses for hash to create pairID creation (use require because checksum has no types)
-const checksum =  require('eth-checksum');
+const checksum = require('eth-checksum');
 
 // ---------------- rss-wide dev functions ----------------
 
