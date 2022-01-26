@@ -183,7 +183,7 @@ const scoreAsset = async (addressFromOverride: string, assetData: AssetData):Pro
 
     const historicalTest = override.historical.backtest;
     
-    const historicalScore = collateralFactor > 1 - liquidationIncentive - tokenDown && historicalTest ? 1 : 0;
+    const historicalScore = collateralFactor > 1 - liquidationIncentive - tokenDown && historicalTest ? 3 : 0;
     
     return historicalScore;
   }
