@@ -1,6 +1,4 @@
 import Fuse from "../fuse-sdk/src";
-import Rari from "../rari-sdk/index";
-
 
 // @ts-ignore
 import Filter from "bad-words";
@@ -103,7 +101,6 @@ export const fetchFusePoolData = async (
   poolId: string | undefined,
   address: string,
   fuse: Fuse,
-  rari?: Rari
 ): Promise<FusePoolData | undefined> => {
   if (!poolId) return undefined;
 
@@ -134,7 +131,7 @@ export const fetchFusePoolData = async (
 
   const ethPrice: number = fuse.web3.utils.fromWei(
     // prefer rari because it has caching
-    await (rari ?? fuse).getEthUsdPriceBN()
+    await (fuse).getEthUsdPriceBN()
   ) as any;
 
   for (let i = 0; i < assets.length; i++) {

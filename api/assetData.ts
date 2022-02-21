@@ -1,36 +1,85 @@
 import { VercelRequest, VercelResponse } from "@vercel/node";
+import { fetchBestPair } from "../modules/fetchBestPair";
+import { FetchedData } from "../modules/rssUtils";
 
-import { calcTotalLiquidity, FetchedData, queuedRequest } from "../modules/rssUtils";
+import { queuedRequest } from "../modules/smartBalancer"
 
 // Returns set of asset specific data points for use in scoring (reused for subsequent pools with the same asset)
 // eslint-disable-next-line import/no-anonymous-default-export
-export default async (request: VercelRequest, response: VercelResponse) => {
-  const { address } = request.query;
+export default async (
+  request: VercelRequest,
+  response: VercelResponse
+) => {
+  const { address } = request.query as { [key: string]: string };
 
   response.setHeader("Access-Control-Allow-Origin", "*");
-  response.setHeader("Cache-Control", "max-age=2592000, s-maxage=2592000");
+  response.setHeader("Cache-Control", "s-maxage=43200");
 
-  const assetData = await fetchAssetData(address);
+  const assetDataBlob = await fetchAssetDataBlob(address);
+
+  const assetData = await organizeFetchedDataBlob(assetDataBlob);
 
   response.json(
     assetData
   )
 }
 
-const sources = [
-  {
-    name: "coingecko",
-    url : ""
+type FetchAssetDataBlobReturn = {
+  coingecko : any,
+  coingecko2: any,
+  ethplorer : any,
+  bestPair  : any,
+  totalVolume: any
+}
+
+const fetchAssetDataBlob = async (
+  address: string
+): Promise<FetchAssetDataBlobReturn> => {
+
+  const pairAndVolume = await fetchBestPair(address)
+
+  const [ 
+    coingecko,
+    coingecko2,
+    ethplorer,
+    bestPair,
+    totalVolume
+  ] = await Promise.all(
+    [
+      await queuedRequest(
+        `https://api.coingecko.com/api/v3/coins/ethereum/contract/${address}`,
+        `coingecko`, address),
+
+      await queuedRequest(
+        `https://api.coingecko.com/api/v3/coins/ethereum/contract/${address}/market_chart/?vs_currency=usd&days=0.25`,
+        `coingecko`, address),
+
+      await queuedRequest(
+        `https://api.ethplorer.io/getTokenInfo/${address}?apiKey=freekey`, 
+        'ethplorer', address),
+      
+      // returns dex pair with highest volume in USD
+      pairAndVolume.bestPair,
+      pairAndVolume.totalVolume
+    ]
+  )
+
+  return {
+    coingecko,
+    coingecko2,
+    ethplorer,
+    bestPair,
+    totalVolume
   }
-]
+}
 
-// fetch data points from variety of sources for specific address
-const fetchAssetData = async (address):Promise<FetchedData> => {
-  
-  const coingeckoRequest = async () => {
-    let data:any = await queuedRequest(`https://api.coingecko.com/api/v3/coins/ethereum/contract/${address}`, `coingecko`, address)
+const organizeFetchedDataBlob = async (
+  data: FetchAssetDataBlobReturn
+): Promise<FetchedData | false> => {
 
+  try {
     const {
+      symbol,
       market_data: {
         market_cap              : { usd: asset_market_cap },
         current_price           : { usd: price_usd },
@@ -38,67 +87,30 @@ const fetchAssetData = async (address):Promise<FetchedData> => {
       },
       tickers,
       community_data: { twitter_followers },
-    } = data;
-
-    return { asset_market_cap, price_usd, fully_diluted_value, tickers, twitter_followers }
-  }
-
-  const uniswapRequest = async () => {
-    let data:any = await queuedRequest(`https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2`, `uniswap`, address)
-    .then( (res) => {
-      return parseInt(res.data.token.totalLiquidity);
-    })
-    .catch(() => false)
-    return data;
-  }
-
-  const sushiswapRequest = async () => {
-    let data:any = await queuedRequest(`https://api.thegraph.com/subgraphs/name/zippoxer/sushiswap-subgraph-fork`, `sushiswap`, address)
-    .then( (res) => {
-      return parseInt(res.data.token.totalLiquidity);
-    })
-    .catch(() => false)
-    return data;
-  }
-
-  const pricesRequest = async () => {
-    let data:any = await queuedRequest(`https://api.coingecko.com/api/v3/coins/ethereum/contract/${address}/market_chart/?vs_currency=usd&days=0.25`, `coingecko`, address);
-    const prices = data.prices.map( (price) => {
-      return price[1];
-    })
-    return prices;
-  }
-
-  const ethplorerRequest = async () => {
-    let data:any = await queuedRequest(`https://api.ethplorer.io/getTokenInfo/${address}?apiKey=freekey`, 'ethplorer', address).then(res => res.holdersCount);
-    return data;
-  }
+    } = data.coingecko;
  
-  const { 
-    asset_market_cap,
-    fully_diluted_value,
-    price_usd,
-    tickers,
-    twitter_followers,
-  } = await coingeckoRequest();
+    const prices = data.coingecko2.prices.map( (price: number[]) => ( price[1] ));
+  
+    const ethplorer = data.ethplorer.holdersCount
     
-  const uniData   = await uniswapRequest();
-  const sushiData = await sushiswapRequest();
-  const prices    = await pricesRequest();
-  const ethplorer = await ethplorerRequest();
+    const bestPair = data.bestPair
 
-  const assetCurrentPrice = prices[0];
+    const totalLiquidity = data.totalVolume
 
-  const totalLiquidity = await calcTotalLiquidity(sushiData, uniData, assetCurrentPrice);
 
-  return {
-    asset_market_cap,
-    fully_diluted_value,
-    price_usd,
-    tickers,
-    twitter_followers,
-    totalLiquidity,
-    prices,
-    ethplorer
-  } as FetchedData;
+    return {
+      symbol,
+      asset_market_cap,
+      fully_diluted_value,
+      price_usd,
+      tickers,
+      twitter_followers,
+      totalLiquidity,
+      prices,
+      ethplorer,
+      bestPair
+    } as FetchedData;
+  } catch (e) {
+    return false
+  }
 }

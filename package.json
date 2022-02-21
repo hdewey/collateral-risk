@@ -22,14 +22,15 @@
     "@uniswap/sdk": "^3.0.3",
     "axios": "^0.24.0",
     "bad-words": "^3.0.4",
+    "easy-table": "^1.2.0",
     "eth-checksum": "^1.0.1",
     "lodash": "^4.17.21",
     "mathjs": "^10.0.0",
     "smart-request-balancer": "^2.1.1",
     "typescript": "^4.0.3",
+    "uni-data": "git://github.com/hdewey/sushi-data",
     "uuid": "^8.3.2",
     "vercel": "^23.1.2",
-    "web3": "^1.2.11",
-    "uni-data": "git://github.com/hdewey/sushi-data"
+    "web3": "^1.2.11"
   }
 }
