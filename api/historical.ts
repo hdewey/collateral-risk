@@ -9,27 +9,34 @@ import { twap, blocksToQuery } from '../modules/rssUtils';
 // query sushiswap
 import sushiswap from "../modules/fetch/sushiFetch";
 import uniswap   from "../modules/fetch/uniFetch";
+import { querySushiswapPool, queryUniswapPool } from "../modules/fetchBestPair";
+import { Pair } from "@sushiswap/sdk";
 
 // cache historical data on vercel for each asset
 // eslint-disable-next-line import/no-anonymous-default-export
 export default async (request: VercelRequest, response: VercelResponse) => {
 
   // financials = liquidation incentive and collateral factor (used for calculating tokenDown)
-  const { financials } = request.body as BacktestConfig;
+  const exchangeParameters = request.body as BacktestConfig;
 
   response.setHeader("Access-Control-Allow-Origin", "*");
-  response.setHeader("Cache-Control", "max-age=2592000, s-maxage=2592000");
+  // half-day cache time DOES NOT CACHE WITH POST REQ
+  response.setHeader("Cache-Control", "s-maxage=43200");
 
   response.setHeader('Access-Control-Allow-Credentials', 'true');
   response.setHeader('Access-Control-Allow-Methods', 'POST');
 
-  const priceData: PriceSet = await queryExchange(request.body);
-  const tokenDown: number   = await calcTokenDown(priceData, financials);
+  const priceData = await queryExchange(exchangeParameters);
 
-  // send token down
-  response.json(
-    { tokenDown }
-  );
+  if (priceData) {
+    const tokenDown: number   = await calcTokenDown(priceData, exchangeParameters.financials);
+
+    // send token down
+    response.json(
+      { tokenDown }
+    );
+
+  }
 }
 
 // calculate token down given a set of prices
@@ -69,7 +76,6 @@ const calcTokenDown = async (priceSet: PriceSet, financials: {liquidationIncenti
           break;
         } else if ( x + i > prices.length) {
           // liquidation never feasible
-          console.log('this is bad');
           break;
         } else {
           // debug
@@ -85,29 +91,37 @@ const calcTokenDown = async (priceSet: PriceSet, financials: {liquidationIncenti
 
 const queryExchange = async (exchangeParameters: BacktestConfig) => {
 
-  const { address, provider } = exchangeParameters;
+  const { pair } = exchangeParameters;
+
+  const pairAddress = pair.pairAddress;
 
   const blocks:number[] = blocksToQuery(exchangeParameters);
 
-  const exchangePrices = async () => {
-    switch (provider) {
-      case 'sushiswap':
-        return await sushiswap(blocks, address);
-      case 'uniswap':
-        return await uniswap(blocks, address);
+  const prices = async () => {
+    switch (pair.exchange) {
+      case "uniswap":
+        return await uniswap( blocks, pairAddress)
+      case "sushiswap":
+        return await sushiswap( blocks, pairAddress)
       default: 
-        // should never happen
-        return [] as number[];
+        return null
     }
   }
 
-  const pricesUSD = await tokenToUSD(blocks, await exchangePrices());
-  
-  return {
-    block: {
-      start: blocks[0], 
-      end: blocks[blocks.length - 1] 
-    },
-    prices: pricesUSD
-  } as PriceSet
+  const dexPrices = await prices();
+
+  if (dexPrices) {
+
+    const pricesUSD = await tokenToUSD(blocks, dexPrices);
+
+    return {
+      block: {
+        start: blocks[0], 
+        end: blocks[blocks.length - 1] 
+      },
+      prices: pricesUSD
+    } as PriceSet
+  } else {
+    return false
+  }
 }

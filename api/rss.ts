@@ -5,13 +5,13 @@ import Web3    from 'web3';
 import fetch   from "node-fetch";
 import { max } from "mathjs";
 
-// fuse utils
+// fuse pools and provider
 import { fetchFusePoolData, USDPricedFuseAsset } from "../modules/lib/fuse-utils/fuseUtils";
 import { initFuseWithProviders, alchemyURL     } from "../modules/lib/fuse-utils/web3Providers";
 
 // functions (by category)
 import { 
-  checkCoingecko, checkSushiswap, checkUniswap, checkAudits, 
+  checkAudits, 
   calcVolatility, 
   fetchLatestBlock, 
   calcOverall,
@@ -21,20 +21,26 @@ import {
 } from '../modules/rssUtils';
 
 // types
-import { AssetData, Score, FetchedData, BacktestConfig } from "../modules/rssUtils";
- 
-// geth (alchemy)
+import { 
+  AssetData,
+  Score, 
+  FetchedData, 
+  BacktestConfig 
+} from "../modules/rssUtils";
+import { Contract } from "web3-eth-contract";
+
+// instantiate fuse for a pool's assets and liquidation incentive
 const fuse = initFuseWithProviders(alchemyURL);
 
 // Web3
 const web3 = new Web3(alchemyURL);
 
 // url for making requests to the rss-module apis (requests are api's instead of modules so vercel can cache each asset for scoring subsequent pools)
-const url = "https://collateral-risk.vercel.app/api";
-// const url = "http://localhost:3000/api";
+// const url = "https://collateral-risk.vercel.app/api";
+const url = "http://localhost:3000/api";
 
-// eslint-disable-next-line import/no-anonymous-default-export
 export default async (request: VercelRequest, response: VercelResponse) => {
+
   const { poolID } = request.query as { [key: string]: string };
 
   response.setHeader("Access-Control-Allow-Origin", "*");
@@ -48,18 +54,58 @@ export default async (request: VercelRequest, response: VercelResponse) => {
 
   console.log('Scoring Pool ' + poolID);
 
-  const { overallScore, multisigScore, scores } = await scorePool(poolID);
-
+  const { 
+    overall,
+    multisig, 
+    scores
+  } = await scorePoolwithPoolID(poolID);
+ 
   response.json({
     poolID,
-    overallScore,
-    multisigScore,
+    overall,
+    multisig,
     scores,
     lastUpdated
   });
 }
 
-const scorePool = async (poolID: string) => {
+const scoreAssetFromAddress = async (
+  _address: string, 
+  config?: {
+    liquidationIncentive: number, // default liquidation incentive to 15%
+    collateralFactor    : number  // default collateral factor to 75%
+  }
+) => {
+  // default liquidation incentive to 15%
+  const li = config ? config.liquidationIncentive : 0.15;
+
+  // default collateral factor to 75%
+  const cf = config ? config.collateralFactor : 0.75;
+
+  const address = fetchAddressOverride(_address);
+
+  if (address === '0x0000000000000000000000000000000000000000') {
+    return returnSafeTest(address, 'ETH');
+  }
+
+  const assetData = await fetchDataSources(address, li, cf);
+
+  if (assetData) {
+
+    const assetScore = await scoreAsset(assetData);
+
+    return assetScore;
+
+  } else {
+    return returnMissingTest(_address, "0x0")
+  }
+}
+
+
+const scorePoolwithPoolID = async (
+  poolID: string
+) => {
+
   const { 
     assets, comptroller 
   } = (await fetchFusePoolData( poolID, "0x0000000000000000000000000000000000000000", fuse ))!;
@@ -68,66 +114,98 @@ const scorePool = async (poolID: string) => {
     JSON.parse(fuse.compoundContracts["contracts/Comptroller.sol:Comptroller"].abi), comptroller
   );
 
-  // main promise for scoring - runs once for each pool
-  return await new Promise<ScoreBlock[]> (async (resolve) => {
+  const scores = await Promise.all( assets.map( async (asset: USDPricedFuseAsset) => {
 
-    // await set of promises (each promise scoring an asset)
-    const scores = await Promise.all( assets.map( async (asset:USDPricedFuseAsset) => {
+    const address = asset.underlyingToken;
 
-      // hardcode asset test for ETH
-      if (asset.underlyingToken === '0x0000000000000000000000000000000000000000') {
-        return returnSafeTest(asset.underlyingToken, asset.underlyingSymbol);
-      }
+    const collateralFactor = (asset.collateralFactor / 1e18);
+    const liquidationIncentive = await fetchLiquidationIncentive(comptrollerContract);
 
-      // check override file to replace asset address (or return asset address if no override)
-      const overrideAddress = fetchAddressOverride(asset.underlyingToken);
-
-      // test address to see if token:WETH pool exists on sushi or uni
-      const poolProvider = await testSources(overrideAddress);
-      
-      // if asset not listed on sushiswap or uniswap
-      if (poolProvider === 'none') {
-        return returnMissingTest(asset.underlyingToken, asset.underlyingSymbol); // returns score with asterisks as values
-      } else {
-
-        // returns data for score calculations
-        const assetData: AssetData = await congregateAssetData(asset, overrideAddress, comptrollerContract, poolProvider);
-
-        // score the asset
-        const scoreBlock: ScoreBlock = await scoreAsset(overrideAddress, assetData);
-
-        return scoreBlock;
-      }
-    }))
-    // resolve array of ScoreBlocks (both score for the asset + info (cf, li, tokendown, etc))
-    resolve(scores as ScoreBlock[]);
-  })
-  .then( (scores: ScoreBlock[]) => {
-
-    // return multisig score from overrides, false if no override
-    const multisigScore = fetchMultisigOverride(poolID);
-
-    // calc max of scores
-    const overallScore = calcOverall(scores);
+    const config = {
+      collateralFactor,
+      liquidationIncentive
+    }
     
-    return {
-      overallScore,
-      multisigScore,
-      scores,
-    };
-  })
+    const score = await scoreAssetFromAddress( address, config );
 
+    return score;
+  }))
+
+  const overall = calcOverall(scores);
+
+  const multisig = fetchMultisigOverride(poolID);
+
+  return {
+    overall,
+    multisig,
+    scores
+  }
+}
+
+const fetchLiquidationIncentive = async (comptrollerContract: Contract) => {
+  const liquidationIncentive = ((await comptrollerContract.methods
+    .liquidationIncentiveMantissa().call()) / 1e18) - 1;
+
+  return liquidationIncentive
+}
+
+const fetchDataSources = async (address: string, li: number, cf: number): Promise<AssetData | false> => {
+
+  const fetchedData = await fetchAssetData(address);
+
+  if (!fetchedData) return false;
+
+  // make request to historical backtest
+  const tokenDown = await fetchHistoricalSimulation(fetchedData.bestPair, li, cf);
+
+  const [
+    symbol,
+    audits,
+    priceChange,
+    totalLiquidity,
+    marketCap,
+    fully_diluted_value,
+    twitterFollowers,
+    lpAddresses,
+  ] = await Promise.all([
+    fetchedData.symbol,
+    
+    checkAudits(fetchedData.tickers),
+    calcVolatility(fetchedData.prices),
+
+    fetchedData.totalLiquidity,
+    fetchedData.asset_market_cap,
+    fetchedData.fully_diluted_value,
+    fetchedData.twitter_followers,
+    fetchedData.ethplorer,
+  ])
+
+  const liquidationIncentive = li;
+  const collateralFactor     = cf;
+
+  return {
+    address,
+    liquidationIncentive,
+    collateralFactor,
+    symbol,
+    totalLiquidity,
+    marketCap,
+    audits,
+    priceChange,
+    fully_diluted_value,
+    twitterFollowers,
+    lpAddresses,
+    tokenDown
+  }  
 }
 
 // All of individual asset scoring done here
-const scoreAsset = async (addressFromOverride: string, assetData: AssetData):Promise<ScoreBlock> => {
-
-  const override = await fetchTestOverride(addressFromOverride)
+const scoreAsset = async (assetData: AssetData):Promise<ScoreBlock> => {
 
   // asset data from assetData api
   const { 
-    assetAddress,
-    assetSymbol,
+    address,
+    symbol,
     collateralFactor, 
     liquidationIncentive, 
     totalLiquidity, 
@@ -139,6 +217,8 @@ const scoreAsset = async (addressFromOverride: string, assetData: AssetData):Pro
     lpAddresses, 
     tokenDown 
   } = assetData;
+
+  const override = await fetchTestOverride(address)
 
   const crash = ():number => {
 
@@ -182,21 +262,37 @@ const scoreAsset = async (addressFromOverride: string, assetData: AssetData):Pro
   const historical = async ():Promise<number> => {
 
     const historicalTest = override.historical.backtest;
+
+    if (tokenDown) {
+      const historicalScore = collateralFactor > 1 - liquidationIncentive - tokenDown && historicalTest ? 1 : 0;
     
-    const historicalScore = collateralFactor > 1 - liquidationIncentive - tokenDown && historicalTest ? 3 : 0;
-    
-    return historicalScore;
+      return historicalScore;
+    } else {
+      return 0
+    }
   }
 
-  const score:Score = {
-    address   : assetAddress,
-    symbol    : assetSymbol,
+  const historicalScore = await historical();
+  const crashScore  = crash();
+  const volatilityScore = volatility();
+  const liquidityScore = liquidity();
 
-    historical: await historical(),
-    crash     : crash(),
-    volatility: volatility(),
-    liquidity : liquidity(),
-    overall   : NaN
+  const overallScore = max(
+    historicalScore,
+    crashScore,
+    volatilityScore,
+    liquidityScore
+  )
+
+  const score: Score = {
+    address,
+    symbol,
+
+    historical: historicalScore,
+    crash     : crashScore,
+    volatility: volatilityScore,
+    liquidity : liquidityScore,
+    overall   : overallScore
   }
 
   const assetInfo = {
@@ -205,122 +301,45 @@ const scoreAsset = async (addressFromOverride: string, assetData: AssetData):Pro
     marketCap,
   }
 
-  score.overall = max(score.historical as number, score.crash as number, score.volatility as number, score.liquidity as number)
-
   return {
     score,
     assetInfo
   } as ScoreBlock;
 }
 
-//  and only return the variables needed for risk calculation
-const congregateAssetData = async (
-  asset: USDPricedFuseAsset,
-  addressFromOverride: string,
-  comptroller   : any,
-  pairProvider  : string
-):Promise<AssetData> => {
-
-  const assetAddress = asset.underlyingToken;
-  const assetSymbol  = asset.underlyingSymbol;
-
-  const fetchedData: FetchedData = await assetDataFetch(addressFromOverride);
-
-  const [
-    audits,
-    priceChange,
-    liquidationIncentive,
-    totalLiquidity,
-    marketCap,
-    fully_diluted_value,
-    twitterFollowers,
-    lpAddresses,
-    collateralFactor
-  ] = await Promise.all([
-    
-    checkAudits(fetchedData.tickers),
-    calcVolatility(fetchedData.prices),
-
-    ((await comptroller.methods
-        .liquidationIncentiveMantissa().call()) / 1e18) - 1,
-
-    fetchedData.totalLiquidity,
-    fetchedData.asset_market_cap,
-    fetchedData.fully_diluted_value,
-    fetchedData.twitter_followers,
-    fetchedData.ethplorer,
-
-    (asset.collateralFactor / 1e18)
-  ])
-
-  // make request to historical backtest
-  const tokenDown: number = await historicalFetch(addressFromOverride, pairProvider, {liquidationIncentive, collateralFactor})
-    .then( (data) => data.tokenDown);
-
-  return {
-    assetAddress,    
-    assetSymbol,
-    audits,
-    priceChange,
-    liquidationIncentive,
-    totalLiquidity,
-    marketCap,
-    fully_diluted_value,
-    twitterFollowers,
-    lpAddresses,
-    collateralFactor,
-    tokenDown
-  }
-}
-
 // make get request to assetData api (separate api for cacheing)
-const assetDataFetch = async (assetAddress: string):Promise<FetchedData> => {
-  return await fetch(url + '/assetData?address=' + assetAddress).then(res => res.json()) as FetchedData;
+const fetchAssetData = async (address: string):Promise<FetchedData | false> => {
+  try {
+    return await fetch(url + '/assetData?address=' + address).then(res => res.json()) as FetchedData;
+  } catch (e) {
+    return false
+  }
 }
 
 // fetch data from sushiswap or uniswap (specified in pair)
-const historicalFetch = async (assetAddress: string, pairProvider: string, poolData: {liquidationIncentive: number, collateralFactor: number}):Promise<{ tokenDown: number }> => {
+const fetchHistoricalSimulation = async (
+  pair : any, 
+  liquidationIncentive: number,
+  collateralFactor: number
+):Promise<number | null> => {
   const weekOfBlocks = 6500;
 
-  // TODO: replace with normal get request, faster
   const config: BacktestConfig = {
-    address      : assetAddress,
-    period       : 68, // roughly 15 mins
+    period       : 68,           // roughly 15 mins
     segmentsBack : weekOfBlocks, // one week of blocks
     end          : await fetchLatestBlock(web3),
-    financials   : poolData,
-    provider     : pairProvider
+    financials   : { liquidationIncentive, collateralFactor },
+    pair         : pair
   }
 
-  return await fetch(url + "/historical", {
+  const tokenDown = (await fetch(url + "/historical", {
     method : "POST",
     headers: {
       'Content-type': 'application/json'
     },
     body   : JSON.stringify(config)
   })
-  .then((res) => res.json())
-}
+  .then((res) => res.json())).tokenDown
 
-// test 
-const testSources = async (address: string): Promise<string> => {
-  const coingecko = await checkCoingecko(address);
-  const sushiswap = await checkSushiswap(address);
-  const uniswap   = await checkUniswap(address);
-
-  if (address === "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0") {
-    console.log('-----')
-    console.log(' address:', address)
-    console.log( "coingecko:", coingecko)
-    console.log( "sushiswap:", sushiswap)
-    console.log( "uniswap:", uniswap)
-    console.log('-----')
-  }
-
-  if (coingecko && (sushiswap || uniswap)) {
-    return uniswap ? 'uniswap' : 'sushiswap';
-  } else {
-    console.log('asset not listed on any pool provider');
-    return 'none'
-  }
+  return tokenDown
 }
