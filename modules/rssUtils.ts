@@ -19,38 +19,13 @@ import _ from 'lodash';
 
 import fetch from 'node-fetch';
 
-// keep requests under rate-limits
-import Queue from 'smart-request-balancer';
-
-// using uuid as unique request identifier for queued request function
-import { v4 as uuidv4 } from 'uuid';
+import { queuedRequest } from "./smartBalancer";
 
 // have to checksum addresses for hash to create pairID creation (use require because checksum has no types)
 const checksum = require('eth-checksum');
 
 // ---------------- rss-wide dev functions ----------------
 
-// calculate hash of token-WETH with sushiswap factory
-export const sushiswapFetchPairID = async (address: string):Promise<string> => {
-  const weth   = '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2';
-
-  const token0 = new sushi_Token(sushi_ChainId.MAINNET, checksum.encode(address), 18);
-  const token1 = new sushi_Token(sushi_ChainId.MAINNET, checksum.encode(weth), 18);
-  const pair   = sushi_Pair.getAddress(token0, token1);
-
-  return pair.toLowerCase();
-}
-
-// calculate hash of token-WETH with uniswap factory
-export const uniswapFetchPairID = async (address: string):Promise<string> => {
-  const weth   = '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2';
-
-  const token0 = new uni_Token(uni_ChainId.MAINNET, checksum.encode(address as String), 18);
-  const token1 = new uni_Token(uni_ChainId.MAINNET, checksum.encode(weth), 18);
-  const pair   = uni_Pair.getAddress(token0, token1);
-
-  return pair.toLowerCase();
-}
 
 // return test with all scores 0 (used for ETH)
 export const returnSafeTest = (address: string, symbol: string):ScoreBlock => {
@@ -94,52 +69,6 @@ export const returnMissingTest = (address: string, symbol: string):ScoreBlock =>
 
 // ---------------- testing provider functions ----------------
 
-// check if contract address is listed on coingecko
-export const checkCoingecko = async (address: string):Promise<boolean> => {
-  return await fetch(
-    `https://api.coingecko.com/api/v3/coins/ethereum/contract/${address}`
-  ).then(async (res) => {
-    const data = await res.json()
-    if (data.error) {
-      return false
-    } else {
-      return true
-    }
-  }).catch(e => {
-    return false;
-  })
-}
-
-// test if asset is listed in a pool on sushiswap
-export const checkSushiswap = async (address: string):Promise<boolean> => {
-  const pairAddress = await sushiswapFetchPairID(address);
-  const pair = await sushiData.exchange.pair({pair_address: pairAddress.toLowerCase()})
-  .then(() => true)
-  .catch(() => false)
-  return pair;
-}
-
-// test if asset is listed in a pool on uniswap
-export const checkUniswap = async (address: string):Promise<boolean> => {
-  const id = await uniswapFetchPairID(address).then( id => id.toLowerCase());
-
-  const query = `
-    {
-      pair(id: "${id}") {
-        id
-      }
-    }
-  `;
-
-  let uniswap = await queuedRequest("https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2", 'uniswap-post', address, query);
-
-  // if pair exists, asset is listed on uniswap
-  if (uniswap.data.pair) {
-    return true;
-  } else {
-    return false;
-  }
-}
 
 // returns latest block height (2 behind to sync w subgraphs)
 export const fetchLatestBlock = async (web3: any):Promise<number> => {
@@ -170,21 +99,6 @@ export const calcOverall = (scoreBlocks: ScoreBlock[]):number|string => {
 }
 
 // ---------------- risk scoring tool functions ----------------
-
-// mutliply sushiswap and uniswap liquidity by asset's most recent price
-export const calcTotalLiquidity = async (sushiLiquidity: number, uniLiqudity: number, assetCurrentPrice: number):Promise<number> => {
-  if ( !uniLiqudity && sushiLiquidity) {
-    return sushiLiquidity * assetCurrentPrice;
-  } else if (uniLiqudity && !sushiLiquidity) {
-    return uniLiqudity * assetCurrentPrice
-  } else if (uniLiqudity && sushiLiquidity) {
-    return (sushiLiquidity + uniLiqudity) * assetCurrentPrice;
-  } 
-  else {
-    console.log('uh oh - no sushiswap or uniswap liquidity')
-    return 0;
-  }
-}
 
 // loop through coingecko tickers to check audits
 export const checkAudits = (tickers: any):boolean => {
@@ -234,10 +148,8 @@ export const parseForPrice = (blocks: SushiBlock[]):number[] => {
 // ---------------- historical backtest functions ----------------
  
 // return an array of blocks to query (15 mins apart with a 68 block period)
-export const blocksToQuery = (historicalConfig: BacktestConfig ):number[] => {
+export const blocksToQuery = ( { period, segmentsBack, end } ):number[] => {
   let blocks:number[] = [];
-
-  const { period, segmentsBack, end } = historicalConfig;
 
   // pick blocks (period) apart from time since latest block and no_segments length
   try {
@@ -249,7 +161,6 @@ export const blocksToQuery = (historicalConfig: BacktestConfig ):number[] => {
   }
 }
 
-// simple twap because getting a high/low for each 15 min block period isn't feasible
 export const twap = (b0: number, b1: number): number => {
   return (b0 + b1) / 2;
 }
@@ -351,9 +262,9 @@ const fillOverride = async (override: {test: string, section: string, value: boo
       backtest: true
     }
   } as FilledOverride
+  
   if (override) {
     override.forEach((element) => {
-
       (filledOverride as any)[element.test][element.section] = element.value;
     });
   }
@@ -361,104 +272,6 @@ const fillOverride = async (override: {test: string, section: string, value: boo
   return filledOverride;
 }
 
-// ---------------- main request function ---------------
-// allows for all requests to meet rate limits (includes overheats!)
-
-// Request queue for rate-limiting
-const queue = new Queue({
-  rules: {
-    // coingecko api
-    coingecko: {
-      rate    : 10, // req
-      limit   : 1,  // per sec
-      priority: 1
-    },
-    // uniswap (thegraph)
-    uniswap: {
-      rate    : 60,       
-      limit   : 10,
-      priority: 1
-    },
-    // sushiswap (thegraph)
-    sushiswap: {
-      rate    : 60,
-      limit   : 10,
-      priority: 1
-    },
-    // ethplorer
-    ethplorer: {
-      rate    : 10,
-      limit   : 1,
-      priority: 1
-    }
-  }
-});
-
-// create queued request with request-smart-balancer
-export const queuedRequest = async (url: string, service: string, address: string, scheme?: string):Promise<any> => {
-
-  // if service is being used for the backtest, pick uniswap as the service
-  const exchange = service.includes('post') ? 'uniswap' : service;
-
-  // smart-request-balancer queue wrapper for requests
-  const requestToURL = async (fetchFunction: { (): Promise<any>; (): Promise<any>; (): Promise<any>; }):Promise<JSON> => {
-    return queue.request(async (retry) => await fetchFunction()
-    .then(response => response)
-    .catch(error => {
-      if (error.response.status === 429) {
-        return retry(error.response.data.parameters.retry_after)
-      }
-      throw error;
-    }), uuidv4(), exchange) // pass a unique identifier (uuid) and the api's target exchange
-    .then(response => response)
-    .catch(error => console.error(error));
-  }
-
-  // use POST request for backtest
-  if (service === 'uniswap' || service === 'sushiswap') {
-    const requestData = async () => {
-      return await fetch(url, {
-        method: "post",
-  
-        body: JSON.stringify({
-          query: `{
-            token(id: "${address.toLowerCase()}") {
-              totalLiquidity
-              txCount
-            }
-          }`,
-        }), 
-        headers: { "Content-Type": "application/json" },
-      }).then((res) => res.json());
-    } 
-    return await requestToURL(requestData);
-
-  } else if (service === 'uniswap-post') {
-
-    // uniswap post request
-    const requestData = async () => {
-      return await fetch(url, {
-        method: "post",
-  
-        body: JSON.stringify({
-          query: scheme,
-        }), 
-        headers: { "Content-Type": "application/json" },
-      }).then((res) => res.json());
-    } 
-    return await requestToURL(requestData);
-
-  } else {
-
-    // use GET request for assetData.ts (simple get request for any other functions)
-    const requestData = async () => {
-      return await fetch(
-        url,
-      ).then((res) => res.json());
-    }
-    return await requestToURL(requestData);
-  }
-}
 
 // ---------------- Types ----------------
 
@@ -505,7 +318,6 @@ export interface Score {
 }
 
 export interface BacktestConfig {
-  address     : string,
   period      : number, // normally 68 blocks is 15 mins
   segmentsBack: number, // should be divisible by 100 (amt of blocks to go back)
   end         : number // getLatestBlock() from web3
@@ -515,13 +327,13 @@ export interface BacktestConfig {
     collateralFactor    : number
   }
 
-  provider: string
+  pair: any
 }
 
 // type for fetched data from different apis (unsorted)
-export interface AssetData {
-  assetAddress        : string,
-  assetSymbol         : string,
+export type AssetData = {
+  address             : string,
+  symbol              : string,
   totalLiquidity      : number,
   marketCap           : number,
   audits              : boolean,
@@ -529,12 +341,13 @@ export interface AssetData {
   fully_diluted_value : number,
   twitterFollowers    : number,
   lpAddresses         : number,
+  tokenDown           : number | null,
   collateralFactor    : number,
-  liquidationIncentive: number,
-  tokenDown           : number
+  liquidationIncentive: number
 }
 
-export interface FetchedData {
+export type FetchedData = {
+  symbol             : string,
   asset_market_cap   : number,
   fully_diluted_value: number,
   price_usd          : number,
@@ -542,8 +355,10 @@ export interface FetchedData {
   twitter_followers  : number,
   totalLiquidity     : number,
   prices             : number[],
-  ethplorer          : number
+  ethplorer          : number,
+  bestPair           : any
 }
+
 
 export interface PriceSet {
   block : { 
