@@ -12,19 +12,10 @@ import sushiData from "@sushiswap/sushi-data";
 
 // cache historical data on vercel for each asset
 // eslint-disable-next-line import/no-anonymous-default-export
-export default async (request: VercelRequest, response: VercelResponse) => {
-
-  // financials = liquidation incentive and collateral factor (used for calculating tokenDown)
-  const exchangeParameters = request.body as BacktestConfig;
+export const runHistoricalTest = async (exchangeParameters: BacktestConfig) => {
 
   const { exchange, pairAddress } = exchangeParameters.pair
 
-  response.setHeader("Access-Control-Allow-Origin", "*");
-  // half-day cache time DOES NOT CACHE WITH POST REQ
-  response.setHeader("Cache-Control", "s-maxage=43200");
-
-  response.setHeader('Access-Control-Allow-Credentials', 'true');
-  response.setHeader('Access-Control-Allow-Methods', 'POST');
 
   const blocks = blocksToQuery(exchangeParameters);
 
@@ -34,15 +25,11 @@ export default async (request: VercelRequest, response: VercelResponse) => {
     const tokenDown = await calcTokenDown(priceData, exchangeParameters.financials);
 
     // send token down
-    response.json(
-      { tokenDown }
-    );
+   return tokenDown
 
   } else {
     const tokenDown = 0;
-    response.json(
-      { tokenDown }
-    )
+    return tokenDown
   }
 }
 

@@ -5,7 +5,21 @@
 			"underlying" : "0x383518188c0c6d7730d91b2c03a03c837814a899"
 		}, 
 		{
+			"address"    : "0x0000000000000000000000000000000000000000",
+			"underlying" : "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+		},
+		{
 			"address"    : "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 
+			"tests" : [
+				{
+					"test" : "crash",
+					"section" : "twitter",
+					"value"  : false
+				}
+			]
+		},
+		{
+			"address"    : "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", 
 			"tests" : [
 				{
 					"test" : "crash",

@@ -6,22 +6,13 @@ import { queuedRequest } from "../modules/smartBalancer"
 
 // Returns set of asset specific data points for use in scoring (reused for subsequent pools with the same asset)
 // eslint-disable-next-line import/no-anonymous-default-export
-export default async (
-  request: VercelRequest,
-  response: VercelResponse
-) => {
-  const { address } = request.query as { [key: string]: string };
-
-  response.setHeader("Access-Control-Allow-Origin", "*");
-  response.setHeader("Cache-Control", "s-maxage=43200");
+export const runAssetData = async (address: string) => {
 
   const assetDataBlob = await fetchAssetDataBlob(address);
 
   const assetData = await organizeFetchedDataBlob(assetDataBlob);
 
-  response.json(
-    assetData
-  )
+  return assetData;
 }
 
 type FetchAssetDataBlobReturn = {

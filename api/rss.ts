@@ -29,6 +29,8 @@ import {
 } from "../modules/rssUtils";
 
 import { Contract } from "web3-eth-contract";
+import { runHistoricalTest } from "./historical";
+import { runAssetData } from "./assetData";
 
 // instantiate fuse for a pool's assets and liquidation incentive
 const fuse = initFuseWithProviders(alchemyURL);
@@ -37,8 +39,8 @@ const fuse = initFuseWithProviders(alchemyURL);
 const web3 = new Web3(alchemyURL);
 
 // url for making requests to the rss-module apis (requests are api's instead of modules so vercel can cache each asset for scoring subsequent pools)
-const url = "https://collateral-risk.vercel.app/api";
-// const url = "http://localhost:3000/api";
+// const url = "https://collateral-risk.vercel.app/api";
+const url = "http://localhost:3000/api";
 
 export default async (request: VercelRequest, response: VercelResponse) => {
 
@@ -135,6 +137,8 @@ const scorePoolwithPoolID = async (
 
   const multisig = fetchMultisigOverride(poolID);
 
+  console.log(`scored pool ${poolID} (overall: ${overall})`);
+
   return {
     overall,
     multisig,
@@ -219,8 +223,6 @@ const scoreAsset = async (assetData: AssetData):Promise<ScoreBlock> => {
   } = assetData;
 
   const override = await fetchTestOverride(address)
-
-  console.log(symbol, priceChange)
 
   const crash = ():number => {
 
@@ -312,7 +314,7 @@ const scoreAsset = async (assetData: AssetData):Promise<ScoreBlock> => {
 // make get request to assetData api (separate api for cacheing)
 const fetchAssetData = async (address: string):Promise<FetchedData | false> => {
   try {
-    return await fetch(url + '/assetData?address=' + address).then(res => res.json()) as FetchedData;
+    return await runAssetData(address);
   } catch (e) {
     return false
   }
@@ -334,14 +336,7 @@ const fetchHistoricalSimulation = async (
     pair         : pair
   }
 
-  const tokenDown = (await fetch(url + "/historical", {
-    method : "POST",
-    headers: {
-      'Content-type': 'application/json'
-    },
-    body   : JSON.stringify(config)
-  })
-  .then((res) => res.json())).tokenDown
+  const tokenDown = await runHistoricalTest(config);
 
   return tokenDown
 }
