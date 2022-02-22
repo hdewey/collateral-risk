@@ -12,7 +12,7 @@ import { overrides as poolOverrides } from "../overrides/poolOverrides.json";
 import { overrides as assetOverrides } from "../overrides/assetOverrides.json"; 
 
 // for calculating overall score
-import { max } from 'mathjs';
+import { abs, exp, max, mean, sqrt, variance } from 'mathjs';
 
 // lodash for arrays (specifically for dev override functions)
 import _ from 'lodash';
@@ -119,9 +119,30 @@ export const checkAudits = (tickers: any):boolean => {
   }
 }
 
-// calculate volatility from price array
+// // calculate volatility from price array
+// export const calcVolatility = (prices: number[]) => {
+//   return sqrt (variance(prices) )
+// }
+
 export const calcVolatility = (prices: number[]) => {
-  return Math.max(...prices) / Math.min(...prices);
+
+  const percentagePrices = prices.map( (price, index) => {
+    if (index == 0) return 0
+    const prevPrice = prices[index - 1];
+    return (( price - prevPrice ) / prevPrice) * 100;
+  })
+
+  const meanPrice = mean(percentagePrices);
+  const squaredDeviations = percentagePrices.map( (price) => {
+
+    const deviation =  abs (meanPrice - price);
+
+    return deviation ** 2;
+  } )
+
+  const sum = squaredDeviations.reduce( (ps, v) => ps + v, 0)
+
+  return sum / percentagePrices.length
 }
 
 
@@ -131,73 +152,10 @@ export const currentETHPrice = async ():Promise<any> => {
   return await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd").then(res => res.json());
 }
 
-// used to parse eth-dai blocks for eth price[]
-export const parseForPrice = (blocks: SushiBlock[]):number[] => {
-  let prices:any[] = [];
-  try {
-    for (let i = 0; i < blocks.length; i++) {
-      let block = blocks[i].data;
-      let price = block.token0Price; // take price of eth for that block
-      prices.push(price);
-    }
-  } finally {
-    return prices;
-  }
-}
 
 // ---------------- historical backtest functions ----------------
  
-// return an array of blocks to query (15 mins apart with a 68 block period)
-export const blocksToQuery = ( { period, segmentsBack, end } ):number[] => {
-  let blocks:number[] = [];
 
-  // pick blocks (period) apart from time since latest block and no_segments length
-  try {
-    for (let i = end - period; i > end - segmentsBack; i = i - period) {
-      blocks.push(i);
-    }
-  } finally {
-    return blocks;
-  }
-}
-
-export const twap = (b0: number, b1: number): number => {
-  return (b0 + b1) / 2;
-}
-
-// returns array of WETH  priced in USD
-export const fetchETHPrices = async (blocksToQuery: number[]): Promise<number[]> => {
-
-  // DAI - WETH pool for eth prices
-  const wethDAI:string = "0xc3d03e4f041fd4cd388c549ee2a29a9e5075882f";
-  
-  // returns array of blocks with from DAI-WETH pair
-  let ethPrices = await sushiData
-  .timeseries({blocks: blocksToQuery, target: sushiData.exchange.pair}, {pair_address: wethDAI});
-
-  // parses each block for only price
-  return parseForPrice(ethPrices);
-}
-
-// usd price calculation (token-ETH)[block n] * (ETH-DAI)[block n] = (token-dai)[block n]
-export const tokenToUSD = async (blocks: number[], ratioPrices: number[]) => {
-  let prices: number[] = [];
-  const ethPrice = await fetchETHPrices(blocks)
-
-  try {
-    for (let i = 0; i < blocks.length; i++) {
-
-      // since sushiswap and uniswap return token0 price in terms of token0/token1
-      // must always have historical WETH price in usd of same blocks to calculate historical prices in usd
-      let price = ratioPrices[i] * ethPrice[i];
-      prices.push(
-        price
-      )
-    }
-  } finally {
-    return prices;
-  }
-}
 // ---------------- dev override functions ---------------
 
 // these functions handle the matching of an address or poolID to it's corresponding override

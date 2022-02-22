@@ -51,7 +51,7 @@ const fetchAssetDataBlob = async (
         `coingecko`, address),
 
       await queuedRequest(
-        `https://api.coingecko.com/api/v3/coins/ethereum/contract/${address}/market_chart/?vs_currency=usd&days=0.25`,
+        `https://api.coingecko.com/api/v3/coins/ethereum/contract/${address}/market_chart/?vs_currency=usd&days=30`,
         `coingecko`, address),
 
       await queuedRequest(
@@ -88,15 +88,17 @@ const organizeFetchedDataBlob = async (
       tickers,
       community_data: { twitter_followers },
     } = data.coingecko;
- 
+    
+    // return prices without blocknumbers/timestamps
     const prices = data.coingecko2.prices.map( (price: number[]) => ( price[1] ));
   
     const ethplorer = data.ethplorer.holdersCount
     
+    // pair address of dex with highest reserve volume
     const bestPair = data.bestPair
 
+    // total reserve volume found in valid dex pairs
     const totalLiquidity = data.totalVolume
-
 
     return {
       symbol,

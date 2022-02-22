@@ -27,6 +27,7 @@ import {
   FetchedData, 
   BacktestConfig 
 } from "../modules/rssUtils";
+
 import { Contract } from "web3-eth-contract";
 
 // instantiate fuse for a pool's assets and liquidation incentive
@@ -71,6 +72,7 @@ export default async (request: VercelRequest, response: VercelResponse) => {
 
 const scoreAssetFromAddress = async (
   _address: string, 
+  symbol  : string,
   config?: {
     liquidationIncentive: number, // default liquidation incentive to 15%
     collateralFactor    : number  // default collateral factor to 75%
@@ -92,13 +94,10 @@ const scoreAssetFromAddress = async (
 
   if (assetData) {
 
-    const assetScore = await scoreAsset(assetData);
+    return await scoreAsset(assetData);
 
-    return assetScore;
+  } else return returnMissingTest(_address, symbol)
 
-  } else {
-    return returnMissingTest(_address, "0x0")
-  }
 }
 
 
@@ -117,6 +116,7 @@ const scorePoolwithPoolID = async (
   const scores = await Promise.all( assets.map( async (asset: USDPricedFuseAsset) => {
 
     const address = asset.underlyingToken;
+    const symbol  = asset.underlyingSymbol;
 
     const collateralFactor = (asset.collateralFactor / 1e18);
     const liquidationIncentive = await fetchLiquidationIncentive(comptrollerContract);
@@ -126,7 +126,7 @@ const scorePoolwithPoolID = async (
       liquidationIncentive
     }
     
-    const score = await scoreAssetFromAddress( address, config );
+    const score = await scoreAssetFromAddress( address, symbol, config );
 
     return score;
   }))
@@ -219,6 +219,8 @@ const scoreAsset = async (assetData: AssetData):Promise<ScoreBlock> => {
   } = assetData;
 
   const override = await fetchTestOverride(address)
+
+  console.log(symbol, priceChange)
 
   const crash = ():number => {
 

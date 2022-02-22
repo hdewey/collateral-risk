@@ -2,8 +2,7 @@
 import { 
   ChainId as sushi_ChainId, 
   Token   as sushi_Token, 
-  Pair    as sushi_Pair,
-  Pair, 
+  Pair    as sushi_Pair
 } from '@sushiswap/sdk';
 
 import { 
