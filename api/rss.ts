@@ -38,10 +38,6 @@ const fuse = initFuseWithProviders(alchemyURL);
 // Web3
 const web3 = new Web3(alchemyURL);
 
-// url for making requests to the rss-module apis (requests are api's instead of modules so vercel can cache each asset for scoring subsequent pools)
-// const url = "https://collateral-risk.vercel.app/api";
-const url = "http://localhost:3000/api";
-
 export default async (request: VercelRequest, response: VercelResponse) => {
 
   const { poolID } = request.query as { [key: string]: string };
