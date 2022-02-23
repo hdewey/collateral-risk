@@ -1,6 +1,6 @@
 var axios = require('axios');
 
-const Fuse = require("../dist/fuse.node.commonjs2.js.js");
+const Fuse = require("../dist/fuse.node.commonjs2.js.js.js");
 
 var fuse = new Fuse(process.env.LIVE_RPC_URL);
 const erc20Abi = JSON.parse(fuse.compoundContracts["contracts/EIP20Interface.sol:EIP20Interface"].abi);

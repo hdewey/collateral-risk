@@ -3,19 +3,16 @@ import { VercelRequest, VercelResponse } from "@vercel/node";
 // types
 import { BacktestConfig, calcVolatility, PriceSet, SushiBlock } from "../modules/rssUtils";
 
-// functions
-
 // query sushiswap
-import sushiswap from "../modules/fetch/sushiFetch";
-import uniswap   from "../modules/fetch/uniFetch";
 import sushiData from "@sushiswap/sushi-data";
+
+import { uniswapQuery, sushiswapQuery } from "../modules/queryUtils"
 
 // cache historical data on vercel for each asset
 // eslint-disable-next-line import/no-anonymous-default-export
 export const runHistoricalTest = async (exchangeParameters: BacktestConfig) => {
 
   const { exchange, pairAddress } = exchangeParameters.pair
-
 
   const blocks = blocksToQuery(exchangeParameters);
 
@@ -89,9 +86,9 @@ const historicalQuery = async (pairAddress: string, exchange: string, blocks: nu
   const prices = async () => {
     switch (exchange) {
       case "uniswap":
-        return await uniswap( blocks, pairAddress)
+        return await uniswapQuery( blocks, pairAddress)
       case "sushiswap":
-        return await sushiswap( blocks, pairAddress)
+        return await sushiswapQuery( blocks, pairAddress)
       default: 
         return null
     }
@@ -161,9 +158,7 @@ export const tokenToUSD = async (blocks: number[], ratioPrices: number[]) => {
       // since sushiswap and uniswap return token0 price in terms of token0/token1
       // must always have historical WETH price in usd of same blocks to calculate historical prices in usd
       let price = ratioPrices[i] * ethPrice[i];
-      prices.push(
-        price
-      )
+      prices.push( price )
     }
   } finally {
     return prices;

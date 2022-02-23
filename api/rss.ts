@@ -2,25 +2,26 @@ import { VercelRequest, VercelResponse } from "@vercel/node";
 
 // tools and shi
 import Web3    from 'web3';
-import fetch   from "node-fetch";
 import { max } from "mathjs";
 
 // fuse pools and provider
-import { fetchFusePoolData, USDPricedFuseAsset } from "../modules/lib/fuse-utils/fuseUtils";
-import { initFuseWithProviders, alchemyURL     } from "../modules/lib/fuse-utils/web3Providers";
+import { fetchFusePoolData, USDPricedFuseAsset } from "../modules/fuse/fuse-utils/fuseUtils";
+import { initFuseWithProviders, alchemyURL     } from "../modules/fuse/fuse-utils/web3Providers";
 
-// functions (by category)
 import { 
   checkAudits, 
   calcVolatility, 
   fetchLatestBlock, 
-  calcOverall,
-  ScoreBlock, 
+  ScoreSet, 
   returnSafeTest, returnMissingTest, 
-  fetchAddressOverride, fetchMultisigOverride, fetchTestOverride  
 } from '../modules/rssUtils';
 
-// types
+import {
+  fetchAddressOverride, 
+  fetchMultisigOverride, 
+  fetchTestOverride  
+} from '../modules/overrideUtils';
+
 import { 
   AssetData,
   Score, 
@@ -200,7 +201,7 @@ const fetchDataSources = async (address: string, li: number, cf: number): Promis
 }
 
 // All of individual asset scoring done here
-const scoreAsset = async (assetData: AssetData):Promise<ScoreBlock> => {
+const scoreAsset = async (assetData: AssetData):Promise<ScoreSet> => {
 
   // asset data from assetData api
   const { 
@@ -304,7 +305,7 @@ const scoreAsset = async (assetData: AssetData):Promise<ScoreBlock> => {
   return {
     score,
     assetInfo
-  } as ScoreBlock;
+  } as ScoreSet;
 }
 
 // make get request to assetData api (separate api for cacheing)
@@ -335,4 +336,26 @@ const fetchHistoricalSimulation = async (
   const tokenDown = await runHistoricalTest(config);
 
   return tokenDown
+}
+
+// calculate overall score from assets
+const calcOverall = (scoreBlocks: ScoreSet[]):number|string => {
+
+  // return only score from a ScoreBlock
+const scores:Score[] = scoreBlocks.map( (scoreBlock) => scoreBlock.score);
+
+// throw out assets that weren't scored
+const filtered:Score[] = scores.filter(function(value){ 
+return value.overall !== '*';
+});
+
+const overall:number[] = filtered.map( (score: Score) => {
+return score.overall as number;
+})
+
+if (overall.length > 0) {
+return max(...overall)
+} else {
+return "*";
+}
 }

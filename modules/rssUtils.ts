@@ -1,34 +1,13 @@
-// ---------------- imports ----------------
-
-// fetch sushiswap exchange data (they handle rate limits on their end)
-import sushiData from "@sushiswap/sushi-data";
-
-// sushiswap & uniswap objects for deterministic pairID creation 
-import { ChainId as sushi_ChainId, Token as sushi_Token, Pair as sushi_Pair } from '@sushiswap/sdk'
-import { ChainId as uni_ChainId, Token as uni_Token, Pair as uni_Pair } from '@uniswap/sdk'
-
-// importing asset and pool overrides
-import { overrides as poolOverrides } from "../overrides/poolOverrides.json";
-import { overrides as assetOverrides } from "../overrides/assetOverrides.json"; 
-
-// for calculating overall score
-import { abs, exp, max, mean, sqrt, variance } from 'mathjs';
-
-// lodash for arrays (specifically for dev override functions)
-import _ from 'lodash';
-
 import fetch from 'node-fetch';
 
-import { queuedRequest } from "./smartBalancer";
+import _ from 'lodash';
 
-// have to checksum addresses for hash to create pairID creation (use require because checksum has no types)
-const checksum = require('eth-checksum');
+import { abs, max, mean  } from 'mathjs';
 
-// ---------------- rss-wide dev functions ----------------
 
 
 // return test with all scores 0 (used for ETH)
-export const returnSafeTest = (address: string, symbol: string):ScoreBlock => {
+export const returnSafeTest = (address: string, symbol: string):ScoreSet => {
   return {
     score: {
       address   : address,
@@ -44,11 +23,11 @@ export const returnSafeTest = (address: string, symbol: string):ScoreBlock => {
       tokenDown       : 0,
       marketCap       : 0,
     }
-  } as ScoreBlock
+  } as ScoreSet
 }
 
 // return test for non-scorable assets
-export const returnMissingTest = (address: string, symbol: string):ScoreBlock => {
+export const returnMissingTest = (address: string, symbol: string):ScoreSet => {
   return {
     score: {
       address   : address,
@@ -64,11 +43,8 @@ export const returnMissingTest = (address: string, symbol: string):ScoreBlock =>
       tokenDown       : null,
       marketCap       : null,
     }
-  } as ScoreBlock
+  } as ScoreSet
 }
-
-// ---------------- testing provider functions ----------------
-
 
 // returns latest block height (2 behind to sync w subgraphs)
 export const fetchLatestBlock = async (web3: any):Promise<number> => {
@@ -76,27 +52,6 @@ export const fetchLatestBlock = async (web3: any):Promise<number> => {
   return blockHeight;
 }
 
-// calculate overall score from assets
-export const calcOverall = (scoreBlocks: ScoreBlock[]):number|string => {
-
-      // return only score from a ScoreBlock
-  const scores:Score[] = scoreBlocks.map( (scoreBlock) => scoreBlock.score);
-
-  // throw out assets that weren't scored
-  const filtered:Score[] = scores.filter(function(value){ 
-    return value.overall !== '*';
-  });
-
-  const overall:number[] = filtered.map( (score: Score) => {
-    return score.overall as number;
-  })
-
-  if (overall.length > 0) {
-    return max(...overall)
-  } else {
-    return "*";
-  }
-}
 
 // ---------------- risk scoring tool functions ----------------
 
@@ -119,11 +74,6 @@ export const checkAudits = (tickers: any):boolean => {
   }
 }
 
-// // calculate volatility from price array
-// export const calcVolatility = (prices: number[]) => {
-//   return sqrt (variance(prices) )
-// }
-
 export const calcVolatility = (prices: number[]) => {
 
   const percentagePrices = prices.map( (price, index) => {
@@ -145,95 +95,13 @@ export const calcVolatility = (prices: number[]) => {
   return sum / percentagePrices.length
 }
 
-
-// ---------------- Sushiswap ----------------
-
 export const currentETHPrice = async ():Promise<any> => {
   return await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd").then(res => res.json());
 }
 
-
-// ---------------- historical backtest functions ----------------
- 
-
-// ---------------- dev override functions ---------------
-
-// these functions handle the matching of an address or poolID to it's corresponding override
-
-// array of address overrides
-const addressOvr = _.compact(assetOverrides.map( (override) => {
-  if (override.underlying) return override 
-  else return null
-}));
-
-// array of test specific overrides
-const testOvr = _.compact(assetOverrides.map( (override) => {
-  if (override.tests) return override
-  else return null
-}));
-
-// array of pool overrides (multisig)
-const poolOvr = _.compact(poolOverrides.map( (override) => {
-  if (override.poolID) return override
-  else return null
-}));
-
-export const fetchAddressOverride = (address: string) => {
-  let override = addressOvr.find (o => o.address === address);
-  return override ? override.underlying : address
-}
-
-export const fetchTestOverride =  async (address: string) => {
-  let override = testOvr.find( o => o.address === address)
-  if (override) {
-    return await fillOverride(override.tests)
-  } else {
-    return await fillOverride([]);
-  }
-}
-
-// return override for pool specific tests (solely multisig at the moment)
-export const fetchMultisigOverride = (poolID: string) => {
-  let override = poolOvr.find (o => o.poolID === poolID);
-
-  if (override === undefined) return false
-  else return override
-}
-
-const fillOverride = async (override: {test: string, section: string, value: boolean}[] | []) => {
-
-  let filledOverride = {
-    crash: {
-      twitter  : true,
-      audit    : true,
-      marketCap: true
-    },
-    liquidity: {
-      totalLiquidity: true,
-      lpAddresses   : true
-    },
-    volatility: {
-      marketCap : true,
-      volatility: true
-    },
-    historical: {
-      backtest: true
-    }
-  } as FilledOverride
-  
-  if (override) {
-    override.forEach((element) => {
-      (filledOverride as any)[element.test][element.section] = element.value;
-    });
-  }
-
-  return filledOverride;
-}
-
-
 // ---------------- Types ----------------
 
-export interface ScoreBlock {
+export interface ScoreSet {
   score: Score,
   assetInfo: {
     collateralFactor: number | null,
@@ -324,24 +192,4 @@ export interface PriceSet {
     end  : number 
   },
   prices: number[]
-}
-
-// type for override object
-type FilledOverride = {
-  crash: { 
-    twitter: boolean; 
-    audit: boolean; 
-    marketCap: boolean; 
-  }; 
-  liquidity: { 
-    totalLiquidity: boolean; 
-    lpAddresses: boolean; 
-  }; 
-  volatility: { 
-    marketCap: boolean; 
-    volatility: boolean; 
-  }; 
-  historical: { 
-    backtest: boolean; 
-  };
 }
