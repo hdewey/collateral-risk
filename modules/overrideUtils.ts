@@ -41,7 +41,7 @@ export const fetchMultisigOverride = (poolID: string) => {
   let override = poolOvr.find (o => o.poolID === poolID);
 
   if (override === undefined) return false
-  else return override
+  else return true
 }
 
 const fillOverride = async (override: {test: string, section: string, value: boolean}[] | []) => {

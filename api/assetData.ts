@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from "@vercel/node";
-import { fetchBestPair } from "../modules/fetchBestPair";
+import { fetchBestPair } from "../modules/pairUtils";
 import { FetchedData } from "../modules/rssUtils";
 
 import { queuedRequest } from "../modules/smartBalancer"

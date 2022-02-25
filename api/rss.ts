@@ -30,8 +30,11 @@ import {
 } from "../modules/rssUtils";
 
 import { Contract } from "web3-eth-contract";
+
 import { runHistoricalTest } from "./historical";
 import { runAssetData } from "./assetData";
+
+import convertScore from "../modules/convertScore";
 
 // instantiate fuse for a pool's assets and liquidation incentive
 const fuse = initFuseWithProviders(alchemyURL);
@@ -60,18 +63,18 @@ export default async (request: VercelRequest, response: VercelResponse) => {
     scores
   } = await scorePoolwithPoolID(poolID);
  
-  response.json({
+  response.json( convertScore({
     poolID,
     overall,
     multisig,
     scores,
     lastUpdated
-  });
+  }));
 }
 
 const scoreAssetFromAddress = async (
   _address: string, 
-  symbol  : string,
+  symbol  : string, // TODO: Replace
   config?: {
     liquidationIncentive: number, // default liquidation incentive to 15%
     collateralFactor    : number  // default collateral factor to 75%
@@ -341,21 +344,21 @@ const fetchHistoricalSimulation = async (
 // calculate overall score from assets
 const calcOverall = (scoreBlocks: ScoreSet[]):number|string => {
 
-  // return only score from a ScoreBlock
-const scores:Score[] = scoreBlocks.map( (scoreBlock) => scoreBlock.score);
+    // return only score from a ScoreBlock
+  const scores:Score[] = scoreBlocks.map( (scoreBlock) => scoreBlock.score);
 
-// throw out assets that weren't scored
-const filtered:Score[] = scores.filter(function(value){ 
-return value.overall !== '*';
-});
+  // throw out assets that weren't scored
+  const filtered:Score[] = scores.filter(function(value){ 
+    return value.overall !== '*';
+  });
 
-const overall:number[] = filtered.map( (score: Score) => {
-return score.overall as number;
-})
+  const overall:number[] = filtered.map( (score: Score) => {
+    return score.overall as number;
+  })
 
-if (overall.length > 0) {
-return max(...overall)
-} else {
-return "*";
-}
+  if (overall.length > 0) {
+    return max(...overall)
+  } else {
+    return "*";
+  }
 }
