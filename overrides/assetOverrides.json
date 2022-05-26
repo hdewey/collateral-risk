@@ -14,7 +14,17 @@
 				{
 					"test" : "crash",
 					"section" : "twitter",
-					"value"  : false
+					"value"  : 0
+				}
+			]
+		},
+		{
+			"address"    : "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", 
+			"tests" : [
+				{
+					"test" : "volatility",
+					"section" : "marketCap",
+					"value"  : 0
 				}
 			]
 		},
@@ -24,7 +34,7 @@
 				{
 					"test" : "crash",
 					"section" : "twitter",
-					"value"  : false
+					"value"  : 0
 				}
 			]
 		}

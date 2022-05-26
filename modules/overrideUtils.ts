@@ -44,30 +44,30 @@ export const fetchMultisigOverride = (poolID: string) => {
   else return true
 }
 
-const fillOverride = async (override: {test: string, section: string, value: boolean}[] | []) => {
+const fillOverride = async (override: {test: string, section: string, value: number}[] | []) => {
 
   let filledOverride = {
-    crash: {
-      twitter  : true,
-      audit    : true,
-      marketCap: true
+    crash: { 
+      twitter: null,
+      audit: null,
+      marketCap: null,
     },
-    liquidity: {
-      totalLiquidity: true,
-      lpAddresses   : true
+    liquidity: { 
+      totalLiquidity: null,
+      lpAddresses: null,
     },
-    volatility: {
-      marketCap : true,
-      volatility: true
+    volatility: { 
+      marketCap: null,
+      volatility: null,
     },
-    historical: {
-      backtest: true
+    historical: { 
+      backtest: null
     }
   } as Override
   
   if (override) {
     override.forEach((element) => {
-      (filledOverride as any)[element.test][element.section] = element.value;
+      filledOverride[element.test][element.section] = element.value;
     });
   }
 
@@ -76,19 +76,21 @@ const fillOverride = async (override: {test: string, section: string, value: boo
 
 type Override = {
   crash: { 
-    twitter: boolean; 
-    audit: boolean; 
-    marketCap: boolean; 
+    twitter: number | null; 
+    audit: number | null; 
+    marketCap: number | null; 
   }; 
   liquidity: { 
-    totalLiquidity: boolean; 
-    lpAddresses: boolean; 
+    totalLiquidity: number | null; 
+    lpAddresses: number | null; 
   }; 
   volatility: { 
-    marketCap: boolean; 
-    volatility: boolean; 
+    marketCap: number | null; 
+    volatility: number | null; 
   }; 
   historical: { 
-    backtest: boolean; 
+    backtest: number | null; 
   };
+
+  [key: string]: any
 }

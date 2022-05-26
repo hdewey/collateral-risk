@@ -222,53 +222,107 @@ const scoreAsset = async (assetData: AssetData):Promise<ScoreSet> => {
     tokenDown 
   } = assetData;
 
+  const debug = true;
+
   const override = await fetchTestOverride(address)
 
   const crash = ():number => {
 
-    const twitterTest = override.crash.twitter;
-    const auditTest   = override.crash.audit;
-    const mktFDVTest   = override.crash.marketCap;
+    const twitterOverride = override?.crash?.twitter;
+    const auditOverride   = override?.crash?.audit;
+    const mktFDVOverride  = override?.crash?.marketCap;
 
-    const twitterScore   = twitterFollowers < 500 && twitterTest  ? 1 : 0;
-    const auditScore     = !audits && auditTest ? 1 : 0;
-    const marketCapScore = marketCap < 0.03 * fully_diluted_value && mktFDVTest ? 1 : 0;
+    const twitterScore   = twitterOverride ? twitterOverride : (twitterFollowers < 500 ? 1 : 0)
+    const auditScore     = auditOverride ? auditOverride : (!audits ? 1 : 0)
+    const marketCapScore = mktFDVOverride ? mktFDVOverride : (marketCap < 0.03 * fully_diluted_value ? 1 : 0)
+
+    if (debug) {
+      console.log({
+        crash: {
+          twitterScore,
+          auditScore,
+          marketCapScore
+        }}
+      )
+    }
 
     return twitterScore + auditScore + marketCapScore;
   }
 
   const liquidity = ():number => {
 
-    const totalLiquidityTest = override.liquidity.totalLiquidity;
-    const lpAddressesTest    = override.liquidity.lpAddresses;
+    const totalLiquidityOverride = override?.liquidity?.totalLiquidity;
+    const lpAddressesOverride    = override?.liquidity?.lpAddresses;
 
-    const totalLiquidityScore = totalLiquidity < 1000000 && totalLiquidityTest ? (totalLiquidity < 200000 ? 2 : 1) : 0;
-    const lpAddressesScore    = lpAddresses < 100 && lpAddressesTest ? 1 : 0;
+    const tl1 = totalLiquidity < 1000000 ? 1 : 0;
+    const tl2 = totalLiquidity < 200000 ? 1 : 0;
+
+    const lp = lpAddresses < 100 ? 1 : 0;
+
+    const totalLiquidityScore =  totalLiquidityOverride !== null ? totalLiquidityOverride : tl1 + tl2;
+    const lpAddressesScore    =  lpAddressesOverride !== null ? lpAddressesOverride : lp;
+
+    if (debug) {
+      console.log({
+        liquidity: {
+          totalLiquidityScore,
+          lpAddressesScore,
+        }}
+      )
+    }
 
     return totalLiquidityScore + lpAddressesScore;
   }
 
   const volatility = ():number => {
 
-    const marketCapTest  = override.volatility.marketCap;
-    const volatilityTest = override.volatility.volatility;
+    const marketCapOverride  = override?.volatility?.marketCap;
+    const volatilityOverride = override?.volatility?.volatility;
+
+    const m1 = marketCap < 300000000 ? 1 : 0;
+    const m2 = marketCap < 50000000 ? 1 : 0;
+    const m3 = marketCap < 15000000 ? 1 : 0;
+
     
-    const marketCapScore = marketCap < 600000000 && marketCapTest ? (marketCap < 100000000 && marketCapTest ? (marketCap < 30000000 && marketCapTest ? 3 : 2) : 1) : 0;
-    
+
     const doublePriceChange = priceChange * 2;
     const slippage = collateralFactor / 2;
 
-    const volatilityScore = priceChange > .1 && doublePriceChange < (1 - collateralFactor - liquidationIncentive) && doublePriceChange < liquidationIncentive - slippage && volatilityTest ? 1 : 0;
+    const v1 = priceChange > slippage ? 1 : 0;
+    const v2 = doublePriceChange > (1 - collateralFactor - liquidationIncentive) ? 1 : 0
+
+    const volatilityScore: number = volatilityOverride !== null ? volatilityOverride : v1 + v2;
+    const marketCapScore: number = marketCapOverride !== null ? marketCapOverride : m1 + m2 + m3;
+
+    if (debug) {
+      console.log({
+        volatility: {
+          symbol,
+          marketCapOverride,
+          marketCapScore,
+          volatilityScore,
+        }}
+      )
+    }
 
     return marketCapScore + volatilityScore;
   }
 
   const historical = async ():Promise<number> => {
 
-    const historicalTest = override.historical.backtest;
+    const historicalOverride = override?.historical?.backtest;
 
     if (tokenDown) {
-      const historicalScore = collateralFactor > 1 - liquidationIncentive - tokenDown && historicalTest ? 1 : 0;
+      const hs = collateralFactor > 1 - liquidationIncentive - tokenDown ? 1 : 0;
+      const historicalScore =  historicalOverride !== null ? historicalOverride : hs;
+
+      if (debug) {
+        console.log({
+          historical: {
+            hs
+          }}
+        )
+      }
     
       return historicalScore;
     } else {
